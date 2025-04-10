@@ -743,85 +743,6 @@ get_user_by_id <- function(user_id) {
   return(NULL)
 }
 
-# Load data from both sample data and user reports
-load_data <- function() {
-  # Load sample data
-  sample_data <- read.csv(SAMPLE_DATA_FILE, stringsAsFactors = FALSE)
-  
-  # Load user reports
-  user_reports <- fromJSON(USER_REPORTS_FILE)
-  
-  # If user reports is empty, initialize as empty data frame
-  if (length(user_reports) == 0) {
-    user_reports <- data.frame(
-      date = character(),
-      type = character(),
-      location = character(),
-      description = character(),
-      latitude = numeric(),
-      longitude = numeric(),
-      stringsAsFactors = FALSE
-    )
-  } else {
-    # Convert list to data frame
-    user_reports_list <- list()
-    
-    for (i in seq_along(user_reports)) {
-      report <- user_reports[[i]]
-      # Only include reports that should be on the map
-      if (!is.null(report$include_on_map) && report$include_on_map) {
-        user_reports_list[[length(user_reports_list) + 1]] <- data.frame(
-          date = report$date,
-          type = report$type,
-          location = report$location,
-          description = report$description,
-          latitude = as.numeric(report$latitude),
-          longitude = as.numeric(report$longitude),
-          stringsAsFactors = FALSE
-        )
-      }
-    }
-    
-    # Combine all user reports into one data frame
-    if (length(user_reports_list) > 0) {
-      user_reports <- do.call(rbind, user_reports_list)
-    } else {
-      user_reports <- data.frame(
-        date = character(),
-        type = character(),
-        location = character(),
-        description = character(),
-        latitude = numeric(),
-        longitude = numeric(),
-        stringsAsFactors = FALSE
-      )
-    }
-  }
-  
-  # Combine data
-  if (nrow(user_reports) > 0) {
-    # Check if columns match
-    missing_cols <- setdiff(names(sample_data), names(user_reports))
-    for (col in missing_cols) {
-      user_reports[[col]] <- NA
-    }
-    missing_cols <- setdiff(names(user_reports), names(sample_data))
-    for (col in missing_cols) {
-      sample_data[[col]] <- NA
-    }
-    
-    # Ensure column order matches
-    user_reports <- user_reports[, names(sample_data)]
-    
-    # Now combine the data
-    combined_data <- rbind(sample_data, user_reports)
-  } else {
-    combined_data <- sample_data
-  }
-  
-  return(combined_data)
-}
-
 # Load all user reports (for admin purposes)
 load_user_reports <- function() {
   # Create file if it doesn't exist
@@ -850,25 +771,6 @@ get_report_by_id <- function(report_id) {
   }
   
   return(NULL)
-}
-
-# Save a new user report
-save_user_report <- function(report) {
-  # Generate report ID if not provided
-  if (is.null(report$id)) {
-    report$id <- generate_uuid()
-  }
-  
-  # Load existing reports
-  reports <- load_user_reports()
-  
-  # Add new report
-  reports[[length(reports) + 1]] <- report
-  
-  # Save to file
-  write_json(reports, USER_REPORTS_FILE)
-  
-  return(report$id)
 }
 
 # Search address to coordinates
@@ -929,6 +831,9 @@ check_for_map_command <- function(text) {
 
 # Initialize files on startup
 initialize_files()
+
+# Load NCVS data
+ncvs_data <- read.csv("NCVS_Select_-_Personal_Victimization.csv", stringsAsFactors = FALSE)
 
 # UI definition
 ui <- dashboardPage(
@@ -1013,7 +918,6 @@ ui <- dashboardPage(
         )
       ),
       
-      
       # Statistics tab
       tabItem(tabName = "statistics",
         fluidRow(
@@ -1021,22 +925,17 @@ ui <- dashboardPage(
             width = 12,
             h2("Statistical Analysis"),
             
-            # Local data plots
+            # Trend visualization
             h3("Trends Over Time"),
             plotlyOutput("trends_plot"),
             
+            # Statistics tables
             h3("Incident Distribution"),
-            plotlyOutput("statistics_plot"),
-            
-            # National data plots
-            h3("National Victimization Statistics (NCVS)"),
-            plotOutput("ncvs_age_plot"),
-            plotOutput("ncvs_gender_plot"),
-            plotOutput("ncvs_seriousness_plot")
+            plotlyOutput("statistics_plot")
           )
         )
       ),
-
+      
       # Report tab
       tabItem(tabName = "report",
         fluidRow(
@@ -1128,7 +1027,7 @@ server <- function(input, output, session) {
   
   # Load data
   observe({
-    values$map_data <- load_data()
+    ncvs_data <- ncvs_data
   })
   
   # Navigation actions
@@ -1274,13 +1173,13 @@ server <- function(input, output, session) {
   
   # Home Map display
   output$home_map <- renderLeaflet({
-    req(values$map_data)
+    req(ncvs_data)
     
     leaflet() %>%
       addTiles() %>%
       setView(lng = -85.5872, lat = 42.2917, zoom = 13) %>%  # Centered on Kalamazoo
       addMarkers(
-        data = values$map_data,
+        data = ncvs_data,
         ~longitude, ~latitude,
         popup = ~paste("<b>Date:</b>", date, "<br>",
                       "<b>Type:</b>", type, "<br>",
@@ -1296,7 +1195,7 @@ server <- function(input, output, session) {
       addTiles() %>%
       setView(lng = -85.5872, lat = 42.2917, zoom = 13) %>%  # Centered on Kalamazoo
       addMarkers(
-        data = values$map_data,
+        data = ncvs_data,
         ~longitude, ~latitude,
         popup = ~paste("<b>Date:</b>", date, "<br>",
                       "<b>Type:</b>", type, "<br>",
@@ -1358,10 +1257,10 @@ server <- function(input, output, session) {
   
   # Recent incidents table on home page
   output$recent_incidents_table <- renderDataTable({
-    req(values$map_data)
+    req(ncvs_data)
     
     # Sort by date (newest first)
-    incidents <- values$map_data %>%
+    incidents <- ncvs_data %>%
       mutate(date = as.Date(date)) %>%
       arrange(desc(date)) %>%
       select(date, type, location, description)
@@ -1379,10 +1278,10 @@ server <- function(input, output, session) {
   
   # Statistics outputs
   output$trends_plot <- renderPlotly({
-    req(values$map_data)
+    req(ncvs_data)
     
     # Convert dates to Date objects
-    df <- values$map_data %>%
+    df <- ncvs_data %>%
       mutate(date = as.Date(date))
     
     # Count incidents by month
@@ -1400,10 +1299,10 @@ server <- function(input, output, session) {
   })
   
   output$statistics_plot <- renderPlotly({
-    req(values$map_data)
+    req(ncvs_data)
     
     # Count by incident type
-    type_counts <- values$map_data %>%
+    type_counts <- ncvs_data %>%
       group_by(type) %>%
       summarize(count = n()) %>%
       arrange(desc(count))
@@ -1503,7 +1402,7 @@ server <- function(input, output, session) {
         setView(lng = -85.5872, lat = 42.2917, zoom = 13)
       
       # Refresh data
-      values$map_data <- load_data()
+      ncvs_data <- ncvs_data
       
       # If posting to forum, suggest going to forum tab
       if (input$post_to_forum) {
@@ -1807,7 +1706,7 @@ server <- function(input, output, session) {
         )
         
         save_user_report(report)
-        values$map_data <- load_data()
+        ncvs_data <- ncvs_data
         
         showNotification("Location added to map", type = "message")
       }
@@ -2042,7 +1941,7 @@ server <- function(input, output, session) {
         )
         
         save_user_report(report)
-        values$map_data <- load_data()
+        ncvs_data <- ncvs_data
         
         showNotification("Location added to map", type = "message")
       }
@@ -2053,34 +1952,4 @@ server <- function(input, output, session) {
 }
 
 # Run the application
-
-output$ncvs_age_plot <- renderPlot({
-  age_counts <- table(ncvs_data$ager)
-  barplot(age_counts,
-          main = "Victim Counts by Age",
-          xlab = "Age",
-          ylab = "Count",
-          col = "skyblue",
-          las = 2)
-})
-
-output$ncvs_gender_plot <- renderPlot({
-  gender <- factor(ncvs_data$sex, labels = c("Male", "Female"))
-  gender_counts <- table(gender)
-  barplot(gender_counts,
-          main = "Victim Counts by Gender",
-          col = c("lightblue", "lightpink"),
-          ylab = "Count")
-})
-
-output$ncvs_seriousness_plot <- renderPlot({
-  seriousness_counts <- table(ncvs_data$serious)
-  barplot(seriousness_counts,
-          main = "Crime Seriousness Levels",
-          xlab = "Level (1 = Low, 3 = High)",
-          ylab = "Count",
-          col = "lightgreen")
-})
-
-
 shinyApp(ui = ui, server = server)
