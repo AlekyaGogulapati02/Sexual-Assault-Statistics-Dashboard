@@ -1013,30 +1013,30 @@ ui <- dashboardPage(
         )
       ),
       
+      
       # Statistics tab
       tabItem(tabName = "statistics",
         fluidRow(
           column(
             width = 12,
-            h2("Statistical Analysis")
-            # National Data Plots
+            h2("Statistical Analysis"),
+            
+            # Local data plots
+            h3("Trends Over Time"),
+            plotlyOutput("trends_plot"),
+            
+            h3("Incident Distribution"),
+            plotlyOutput("statistics_plot"),
+            
+            # National data plots
             h3("National Victimization Statistics (NCVS)"),
             plotOutput("ncvs_age_plot"),
             plotOutput("ncvs_gender_plot"),
             plotOutput("ncvs_seriousness_plot")
-,
-            
-            # Trend visualization
-            h3("Trends Over Time"),
-            plotlyOutput("trends_plot"),
-            
-            # Statistics tables
-            h3("Incident Distribution"),
-            plotlyOutput("statistics_plot")
           )
         )
       ),
-      
+
       # Report tab
       tabItem(tabName = "report",
         fluidRow(
@@ -1108,10 +1108,6 @@ ui <- dashboardPage(
     )
   )
 )
-
-
-# Load NCVS data
-ncvs_data <- read.csv("NCVS_Select_-_Personal_Victimization.csv", stringsAsFactors = FALSE)
 
 # Server logic
 server <- function(input, output, session) {
