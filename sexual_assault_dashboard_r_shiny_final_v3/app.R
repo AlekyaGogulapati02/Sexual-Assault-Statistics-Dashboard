@@ -1018,7 +1018,13 @@ ui <- dashboardPage(
         fluidRow(
           column(
             width = 12,
-            h2("Statistical Analysis"),
+            h2("Statistical Analysis")
+            # National Data Plots
+            h3("National Victimization Statistics (NCVS)"),
+            plotOutput("ncvs_age_plot"),
+            plotOutput("ncvs_gender_plot"),
+            plotOutput("ncvs_seriousness_plot")
+,
             
             # Trend visualization
             h3("Trends Over Time"),
@@ -1102,6 +1108,10 @@ ui <- dashboardPage(
     )
   )
 )
+
+
+# Load NCVS data
+ncvs_data <- read.csv("NCVS_Select_-_Personal_Victimization.csv", stringsAsFactors = FALSE)
 
 # Server logic
 server <- function(input, output, session) {
@@ -2047,4 +2057,34 @@ server <- function(input, output, session) {
 }
 
 # Run the application
+
+output$ncvs_age_plot <- renderPlot({
+  age_counts <- table(ncvs_data$ager)
+  barplot(age_counts,
+          main = "Victim Counts by Age",
+          xlab = "Age",
+          ylab = "Count",
+          col = "skyblue",
+          las = 2)
+})
+
+output$ncvs_gender_plot <- renderPlot({
+  gender <- factor(ncvs_data$sex, labels = c("Male", "Female"))
+  gender_counts <- table(gender)
+  barplot(gender_counts,
+          main = "Victim Counts by Gender",
+          col = c("lightblue", "lightpink"),
+          ylab = "Count")
+})
+
+output$ncvs_seriousness_plot <- renderPlot({
+  seriousness_counts <- table(ncvs_data$serious)
+  barplot(seriousness_counts,
+          main = "Crime Seriousness Levels",
+          xlab = "Level (1 = Low, 3 = High)",
+          ylab = "Count",
+          col = "lightgreen")
+})
+
+
 shinyApp(ui = ui, server = server)
